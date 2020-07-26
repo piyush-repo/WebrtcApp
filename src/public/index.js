@@ -96,3 +96,7 @@ socket.on('offer', async (event)=>{
     console.log("Exception : ", exception);
   }  
 });
+
+socket.on('answer', event => {
+  rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event));
+})
