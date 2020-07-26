@@ -64,10 +64,35 @@ socket.on('ready', async ()=>{
             rtcPeerConnection.addTrack(localStream.getTracks()[1], localStream); // video
             const sessionDescription =  await rtcPeerConnection.createOffer();
             rtcPeerConnection.setLocalDescription(sessionDescription);
-
+            socket.emit('offer', {
+              type: 'offer',
+              sdp: sessionDescription,
+              room: roomNumber
+            });
         }
     }catch(exception) {
+      console.log("Exception : ", exception);
+    }  
+});
 
-    }
-    
-})
+socket.on('offer', async (event)=>{
+  try{
+      if(!isCaller){
+          rtcPeerConnection = new RTCPeerConnection(iceServers);
+          rtcPeerConnection.onicecandidate = onIceCandidate;
+          rtcPeerConnection.ontrack = onAddStream;
+          rtcPeerConnection.addTrack(localStream.getTracks()[0], localStream); // audio
+          rtcPeerConnection.addTrack(localStream.getTracks()[1], localStream); // video
+          rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event));
+          const sessionDescription =  await rtcPeerConnection.createAnswer();
+          rtcPeerConnection.setLocalDescription(sessionDescription);
+          socket.emit('answer', {
+            type: 'answer',
+            sdp: sessionDescription,
+            room: roomNumber
+          });
+      }
+  }catch(exception) {
+    console.log("Exception : ", exception);
+  }  
+});
