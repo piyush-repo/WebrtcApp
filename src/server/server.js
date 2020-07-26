@@ -40,6 +40,11 @@ io.on("connection", (socket) => {
     socket.broadcast.to(event.room).emit("offer", event.sdp);
   });
 
+  socket.on("offer", (event)=>{
+    console.log("offer : ", event.sdp);
+    socket.broadcast.to(event.room).emit("offer", event.sdp);
+  });
+
   socket.on("answer", (event) => {
     socket.broadcast.to(event.room).emit("answer", event.sdp);
   });
