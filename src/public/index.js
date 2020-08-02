@@ -4,8 +4,6 @@ const selectRoom = document.getElementById("selectRoom");
 const consultingRoom = document.getElementById("consultingRoom");
 const inputRoomNumber = document.getElementById("roomNumber");
 const btnGoRoom = document.getElementById("goRoom");
-
-let roomNumber, localStream, remoteStream, rtcPeerConnection, isCaller;
 const peerConnectionConfig = {
   iceServers: [
     { urls: "stun:stun.services.mozilla.com" },
@@ -18,108 +16,42 @@ const streamConstraints = {
   video: true,
 };
 
+let roomNumber, localStream, remoteStream, rtcPeerConnection, isCaller;
+
 const socket = io();
 
-btnGoRoom.onclick = function () {
-  if (inputRoomNumber.value === "") {
-    alert("please type a room name");
-  } else {
-    roomNumber = inputRoomNumber.value;
-    console.log("Client : create or join ", roomNumber);
-    socket.emit("create or join", roomNumber);
-    consultingRoom.style = "display: block";
-    selectRoom.style = "display: none";
-  }
-};
-
-socket.on("created", async (room) => {
+async function getUserMediaStream() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia(streamConstraints);
     localStream = stream;
     localVideo.srcObject = stream;
-    isCaller = true;
   } catch (error) {
     console.log("An Error occured while getUserMedia : ", error);
+    throw error;
   }
-});
+}
 
-socket.on("joined", async (room) => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia(streamConstraints);
-    localStream = stream;
-    localVideo.srcObject = stream;
-    socket.emit("ready", roomNumber);
-  } catch (error) {
-    console.log("An Error occured while getUserMedia : ", error);
-  }
-});
+function createPeerConnection() {
+  rtcPeerConnection = new RTCPeerConnection(peerConnectionConfig);
+  rtcPeerConnection.onicecandidate = onIceCandidate;
+  rtcPeerConnection.ontrack = onAddStream;
+  rtcPeerConnection.addTrack(localStream.getTracks()[0], localStream); // audio
+  rtcPeerConnection.addTrack(localStream.getTracks()[1], localStream); // video
+}
 
-socket.on("ready", async () => {
-  try {
-    if (isCaller) {
-      rtcPeerConnection = new RTCPeerConnection(peerConnectionConfig);
-      rtcPeerConnection.onicecandidate = onIceCandidate;
-      rtcPeerConnection.ontrack = onAddStream;
-      rtcPeerConnection.addTrack(localStream.getTracks()[0], localStream); // audio
-      rtcPeerConnection.addTrack(localStream.getTracks()[1], localStream); // video
-      const sessionDescription = await rtcPeerConnection.createOffer();
-      rtcPeerConnection.setLocalDescription(sessionDescription);
-      socket.emit("offer", {
-        type: "offer",
-        sdp: sessionDescription,
-        room: roomNumber,
-      });
-    }
-  } catch (exception) {
-    console.log("Exception : ", exception);
-  }
-});
-
-
-//  the user who recieves the request
-socket.on("offer", async (event) => {
-  try {
-    if (!isCaller) {
-      rtcPeerConnection = new RTCPeerConnection(peerConnectionConfig);
-      rtcPeerConnection.onicecandidate = onIceCandidate;
-      rtcPeerConnection.ontrack = onAddStream;
-      rtcPeerConnection.addTrack(localStream.getTracks()[0], localStream); // audio
-      rtcPeerConnection.addTrack(localStream.getTracks()[1], localStream); // video
-      rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event));
-      const sessionDescription = await rtcPeerConnection.createAnswer();
-      rtcPeerConnection.setLocalDescription(sessionDescription);
-      // sending it to the signalling server and then to the caller
-      socket.emit("answer", {
-        type: "answer",
-        sdp: sessionDescription,
-        room: roomNumber,
-      });
-    }
-  } catch (exception) {
-    console.log("Exception : ", exception);
-  }
-});
-
-// recieved by the caller
-socket.on("answer", (event) => {
-  rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event));
-});
-
-// recieving from the other peer
-socket.on("candidate", (event) => {
-  const candidate = new RTCIceCandidate({
-    sdpMLineIndex: event.label,
-    candidate: event.candidate,
+function emitOfferOrAnswerEvent(eventType, sessionDescription, room) {
+  socket.emit(eventType, {
+    type: eventType,
+    sdp: sessionDescription,
+    room: room,
   });
-  // add Icecandidate to rtc connection
-  rtcPeerConnection.addIceCandidate(candidate);
-});
+};
 
 function onAddStream(event) {
   console.log("Adding remote streams");
   remoteVideo.srcObject = event.streams[0];
   remoteStream = event.streams[0];
-}
+};
 
 function onIceCandidate(event) {
   if (event.candidate) {
@@ -133,4 +65,89 @@ function onIceCandidate(event) {
       room: roomNumber,
     });
   }
-}
+};
+
+btnGoRoom.onclick = function () {
+  if (inputRoomNumber.value === "") {
+    console.log("No room Selected");
+    alert("please type a room name");
+  } else {
+    roomNumber = inputRoomNumber.value;
+    console.log("Client : create or join ", roomNumber);
+    socket.emit("create or join", roomNumber);
+    consultingRoom.style = "display: block";
+    selectRoom.style = "display: none";
+  }
+};
+
+// When a socket creates a room
+socket.on("created", async (room) => {
+  try {
+    await getUserMediaStream();
+    isCaller = true;
+  } catch (error) {
+    console.log("Created : An Error occurred while getUserMedia : ", error);
+  }
+});
+
+
+// When a socket joins a room
+socket.on("joined", async (room) => {
+  try {
+    await getUserMediaStream();
+    socket.emit("ready", roomNumber);
+  } catch (error) {
+    console.log("Joined : An Error occurred while getUserMedia : ", error);
+  }
+});
+
+// When a socket ready to interact
+socket.on("ready", async () => {
+  try {
+    if (isCaller) {
+      createPeerConnection();
+      // Invoking createOffer method of rtcPeerConnection
+      const sessionDescription = await rtcPeerConnection.createOffer();
+      rtcPeerConnection.setLocalDescription(sessionDescription);
+      emitOfferOrAnswerEvent("offer", sessionDescription, roomNumber);
+    }
+  } catch (exception) {
+    console.log("Ready : Exception : ", exception);
+  }
+});
+
+//  the user who recieves the request
+socket.on("offer", async (event) => {
+  try {
+    if (!isCaller) {
+      createPeerConnection();
+      rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event));
+      // Invoking createAnswer method of rtcPeerConnection
+      const sessionDescription = await rtcPeerConnection.createAnswer();
+      rtcPeerConnection.setLocalDescription(sessionDescription);
+      // sending it to the signalling server and then to the caller
+      console.log("Emitted event for answer from client");
+      emitOfferOrAnswerEvent("answer", sessionDescription, roomNumber);
+    }
+  } catch (exception) {
+    console.log("Offer : Exception : ", exception);
+  }
+});
+
+// recieved by the caller
+socket.on("answer", (event) => {
+  console.log("Event details recieved :", event);
+  rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event));
+});
+
+// recieving from the other peer
+socket.on("candidate", (event) => {
+  const candidate = new RTCIceCandidate({
+    sdpMLineIndex: event.label,
+    candidate: event.candidate,
+  });
+  // add Icecandidate to rtc connection
+  rtcPeerConnection.addIceCandidate(candidate);
+});
+
+

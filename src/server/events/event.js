@@ -2,12 +2,12 @@ module.exports = {
   createOrJoin: (io, socket, room) => {
     console.log("Server : create or join to room: ", room);
     const numClientsInRoom = io.sockets.adapter.rooms[room] || { length: 0 };
-    console.log(`${room} has ${numClientsInRoom} clients`);
-    if (!numClientsInRoom) {
+    console.log(`${room} has ${numClientsInRoom.length} clients`);
+    if (!numClientsInRoom.length) {
       socket.join(room);
       console.log("created socket : ", socket.id);
       socket.emit("created", room);
-    } else if (numClientsInRoom === 1) {
+    } else if (numClientsInRoom.length === 1) {
       socket.join(room);
       console.log("joined socket : ", socket.id);
       socket.emit("joined", room);
