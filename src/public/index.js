@@ -20,6 +20,8 @@ let roomNumber, localStream, remoteStream, rtcPeerConnection, isCaller;
 
 const socket = io();
 
+
+// fetch userMediaStream
 async function getUserMediaStream() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia(streamConstraints);
@@ -31,6 +33,7 @@ async function getUserMediaStream() {
   }
 }
 
+// CreatePeerConnection
 function createPeerConnection() {
   rtcPeerConnection = new RTCPeerConnection(peerConnectionConfig);
   rtcPeerConnection.onicecandidate = onIceCandidate;
@@ -39,6 +42,7 @@ function createPeerConnection() {
   rtcPeerConnection.addTrack(localStream.getTracks()[1], localStream); // video
 }
 
+// Invoke answer and offer event
 function emitOfferOrAnswerEvent(eventType, sessionDescription, room) {
   socket.emit(eventType, {
     type: eventType,
@@ -67,6 +71,7 @@ function onIceCandidate(event) {
   }
 };
 
+// Configure onclick event
 btnGoRoom.onclick = function () {
   if (inputRoomNumber.value === "") {
     console.log("No room Selected");
